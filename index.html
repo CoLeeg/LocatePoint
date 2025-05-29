@@ -59,7 +59,6 @@
         pdfjsLib.GlobalWorkerOptions.workerSrc = 
             'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.worker.min.js';
 
-        // 初始化事件监听
         document.getElementById('pdfInput').addEventListener('change', handleFileUpload);
         
         function handleFileUpload(e) {
@@ -105,32 +104,51 @@
         }
 
         function setupPageInteractions(container) {
-            // 双击添加标注
+            // Double-click to add annotation (desktop only)
             container.addEventListener('dblclick', function(e) {
                 if (currentMode !== 'add') return;
-                
                 const rect = container.getBoundingClientRect();
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
-                
                 createAnnotation(container, x, y);
             });
 
-            // 拖拽处理
+            // Mouse move for drag
             container.addEventListener('mousemove', function(e) {
                 if (!draggedElement) return;
-                
                 const rect = container.getBoundingClientRect();
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
-                
                 draggedElement.style.left = `${x - 12}px`;
                 draggedElement.style.top = `${y - 12}px`;
             });
 
+            // Mouse up to end drag
             container.addEventListener('mouseup', () => {
                 if (draggedElement) {
-                    // 更新存储的位置数据
+                    const annotation = annotations.find(
+                        a => a.id === parseInt(draggedElement.dataset.id)
+                    );
+                    annotation.x = parseFloat(draggedElement.style.left) + 12;
+                    annotation.y = parseFloat(draggedElement.style.top) + 12;
+                    draggedElement = null;
+                }
+            });
+
+            // Touch move for drag
+            container.addEventListener('touchmove', function(e) {
+                if (!draggedElement) return;
+                e.preventDefault();
+                const rect = container.getBoundingClientRect();
+                const x = e.touches[0].clientX - rect.left;
+                const y = e.touches[0].clientY - rect.top;
+                draggedElement.style.left = `${x - 12}px`;
+                draggedElement.style.top = `${y - 12}px`;
+            }, { passive: false });
+
+            // Touch end to end drag
+            container.addEventListener('touchend', function(e) {
+                if (draggedElement) {
                     const annotation = annotations.find(
                         a => a.id === parseInt(draggedElement.dataset.id)
                     );
@@ -149,7 +167,6 @@
                 y,
                 number: annotations.length + 1
             };
-
             annotations.push(annotation);
             updateNumbering();
             drawAnnotation(container, annotation);
@@ -163,17 +180,32 @@
             dot.textContent = annotation.number;
             dot.dataset.id = annotation.id;
 
-            // 拖拽处理
-            dot.addEventListener('mousedown', () => {
+            // Mouse drag
+            dot.addEventListener('mousedown', (e) => {
                 if (currentMode === 'move') {
                     draggedElement = dot;
                 }
             });
 
-            // 单击处理
+            // Touch drag (long press to start)
+            let touchTimer = null;
+            dot.addEventListener('touchstart', (e) => {
+                if (currentMode !== 'move') return;
+                e.preventDefault();
+                touchTimer = setTimeout(() => {
+                    draggedElement = dot;
+                }, 500); // 0.5 seconds long press
+            }, { passive: false });
+
+            dot.addEventListener('touchend', (e) => {
+                clearTimeout(touchTimer);
+                touchTimer = null;
+                // The actual annotation update is handled by the container's touchend event
+            });
+
+            // Click to delete (only in set-point mode)
             dot.addEventListener('click', function(e) {
                 if (currentMode === 'move') return;
-                
                 e.stopPropagation();
                 handleAnnotationClick(this);
             });
@@ -227,54 +259,5 @@
                 .forEach(ann => drawAnnotation(container, ann));
         }
     </script>
-
-<script>
-document.addEventListener('DOMContentLoaded', (event) => {
-    let touchTimer = null;
-    const dots = document.querySelectorAll('.dot');
-
-    dots.forEach(dot => {
-        dot.addEventListener('touchstart', (e) => {
-            if (currentMode !== 'move') return;
-
-            e.preventDefault(); // Prevent click event
-            touchTimer = setTimeout(() => {
-                draggedElement = dot;
-            }, 500); // 0.5 seconds long press
-        });
-
-        dot.addEventListener('touchend', () => {
-            clearTimeout(touchTimer);
-            touchTimer = null;
-        });
-    });
-
-    function getEventPosition(e, container) {
-        const rect = container.getBoundingClientRect();
-        if (e.touches && e.touches.length > 0) {
-            return {
-                x: e.touches[0].clientX - rect.left,
-                y: e.touches[0].clientY - rect.top
-            };
-        } else {
-            return {
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top
-            };
-        }
-    }
-
-    container.addEventListener('mousemove', (e) => handleMove(e, container));
-    container.addEventListener('touchmove', (e) => handleMove(e, container));
-
-    function handleMove(e, container) {
-        if (!draggedElement) return;
-
-        const { x, y } = getEventPosition(e, container);
-        draggedElement.style.left = `${x - 12}px`;
-        draggedElement.style.top = `${y - 12}px`;
-    }
-});
-</script>
 </body>
 </html>
