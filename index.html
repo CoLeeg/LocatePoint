@@ -170,62 +170,6 @@
                 }
             });
 
-            let touchTimer = null;
-
-            
-dot.addEventListener('touchstart', (e) => {
-  if (currentMode !== 'move') return;
-
-  e.preventDefault(); // 防止點擊觸發點選事件
-  touchTimer = setTimeout(() => {
-    draggedElement = dot;
-  }, 500); // 0.5 秒長按
-});
-
-dot.addEventListener('touchend', () => {
-  clearTimeout(touchTimer);
-  touchTimer = null;
-});
-
-container.addEventListener('mousemove', function(e) {
-  if (!draggedElement) return;
-
-  const rect = container.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-
-  draggedElement.style.left = `${x - 12}px`;
-  draggedElement.style.top = `${y - 12}px`;
-});
-
-            function getEventPosition(e, container) {
-  const rect = container.getBoundingClientRect();
-  if (e.touches && e.touches.length > 0) {
-    return {
-      x: e.touches[0].clientX - rect.left,
-      y: e.touches[0].clientY - rect.top
-    };
-  } else {
-    return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
-    };
-  }
-}
-
-container.addEventListener('mousemove', (e) => handleMove(e, container));
-container.addEventListener('touchmove', (e) => handleMove(e, container));
-
-function handleMove(e, container) {
-  if (!draggedElement) return;
-
-  const { x, y } = getEventPosition(e, container);
-  draggedElement.style.left = `${x - 12}px`;
-  draggedElement.style.top = `${y - 12}px`;
-}
-
-            
-            
             // 单击处理
             dot.addEventListener('click', function(e) {
                 if (currentMode === 'move') return;
@@ -283,5 +227,54 @@ function handleMove(e, container) {
                 .forEach(ann => drawAnnotation(container, ann));
         }
     </script>
+
+<script>
+document.addEventListener('DOMContentLoaded', (event) => {
+    let touchTimer = null;
+    const dots = document.querySelectorAll('.dot');
+
+    dots.forEach(dot => {
+        dot.addEventListener('touchstart', (e) => {
+            if (currentMode !== 'move') return;
+
+            e.preventDefault(); // Prevent click event
+            touchTimer = setTimeout(() => {
+                draggedElement = dot;
+            }, 500); // 0.5 seconds long press
+        });
+
+        dot.addEventListener('touchend', () => {
+            clearTimeout(touchTimer);
+            touchTimer = null;
+        });
+    });
+
+    function getEventPosition(e, container) {
+        const rect = container.getBoundingClientRect();
+        if (e.touches && e.touches.length > 0) {
+            return {
+                x: e.touches[0].clientX - rect.left,
+                y: e.touches[0].clientY - rect.top
+            };
+        } else {
+            return {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        }
+    }
+
+    container.addEventListener('mousemove', (e) => handleMove(e, container));
+    container.addEventListener('touchmove', (e) => handleMove(e, container));
+
+    function handleMove(e, container) {
+        if (!draggedElement) return;
+
+        const { x, y } = getEventPosition(e, container);
+        draggedElement.style.left = `${x - 12}px`;
+        draggedElement.style.top = `${y - 12}px`;
+    }
+});
+</script>
 </body>
 </html>
