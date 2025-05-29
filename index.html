@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>PDF标注工具</title>
+    <title>360Photo Point Setting Tool</title>
     <style>
         #pdf-container { margin: 20px; }
         .page-container { 
@@ -43,8 +43,8 @@
 <body>
     <div id="toolbar">
         <input type="file" id="pdfInput" accept="application/pdf" multiple>
-        <button id="addModeBtn" onclick="toggleAddMode()">标注模式</button>
-        <button id="moveModeBtn" onclick="toggleMoveMode()">移动模式</button>
+        <button id="addModeBtn" onclick="toggleAddMode()">Set Point</button>
+        <button id="moveModeBtn" onclick="toggleMoveMode()">Move</button>
     </div>
     <div id="pdf-container"></div>
 
@@ -183,7 +183,7 @@
 
         function handleAnnotationClick(element) {
             const annotationId = parseInt(element.dataset.id);
-            if (confirm('删除这个标注点吗？')) {
+            if (confirm('Delete this point?')) {
                 annotations = annotations.filter(a => a.id !== annotationId);
                 element.remove();
                 updateNumbering();
