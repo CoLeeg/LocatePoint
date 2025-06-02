@@ -3,7 +3,41 @@
 <head>
     <title>360Photo Point Setting Tool</title>
     <style>
-        #pdf-container { margin: 20px; }
+        body.sidebar-hidden #sidebar {
+            display: none;
+        }
+        #sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 250px;
+            background: #f8f8f8;
+            border-right: 1px solid #ccc;
+            overflow-y: auto;
+            transition: transform 0.3s;
+            z-index: 100;
+            padding: 10px;
+        }
+        #toggleSidebarBtn {
+            position: fixed;
+            left: 10px;
+            top: 10px;
+            z-index: 101;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #pdf-container {
+            margin: 20px;
+            margin-left: 270px; /* room for sidebar */
+        }
+        body.sidebar-hidden #pdf-container {
+            margin-left: 20px;
+        }
         .page-container { 
             position: relative; 
             margin: 10px 0; 
@@ -38,15 +72,46 @@
             background-color: #4CAF50;
             color: white;
         }
+        #pageIndicator {
+            position: fixed;
+            right: 30px;
+            top: 30px;
+            background: #333;
+            color: #fff;
+            padding: 5px 15px;
+            border-radius: 4px;
+            z-index: 200;
+            opacity: 0.85;
+            font-size: 16px;
+        }
+        #pdfPageList {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        #pdfPageList li {
+            cursor: pointer;
+            padding: 4px 0;
+            border-bottom: 1px solid #eee;
+        }
+        #pdfPageList li:hover {
+            background: #e0e0e0;
+        }
     </style>
 </head>
 <body>
+    <button id="toggleSidebarBtn" onclick="toggleSidebar()">☰</button>
+    <div id="sidebar">
+        <h3>PDF Pages</h3>
+        <ul id="pdfPageList"></ul>
+    </div>
     <div id="toolbar">
         <input type="file" id="pdfInput" accept="application/pdf" multiple>
         <button id="addModeBtn" onclick="toggleAddMode()">Set Point</button>
         <button id="moveModeBtn" onclick="toggleMoveMode()">Move</button>
     </div>
     <div id="pdf-container"></div>
+    <div id="pageIndicator">Page -</div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.min.js"></script>
     <script>
@@ -60,7 +125,11 @@
             'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.worker.min.js';
 
         document.getElementById('pdfInput').addEventListener('change', handleFileUpload);
-        
+
+        function toggleSidebar() {
+            document.body.classList.toggle('sidebar-hidden');
+        }
+
         function handleFileUpload(e) {
             const files = Array.from(e.target.files);
             files.forEach(file => {
@@ -75,6 +144,7 @@
             const reader = new FileReader();
             reader.onload = async function() {
                 const pdf = await pdfjsLib.getDocument(reader.result).promise;
+                file.numPages = pdf.numPages;
                 const container = document.getElementById('pdf-container');
                 
                 for (let i = 1; i <= pdf.numPages; i++) {
@@ -99,6 +169,8 @@
                     loadAnnotations(pageContainer);
                     setupPageInteractions(pageContainer);
                 }
+                updatePdfPageList();
+                updatePageIndicator();
             };
             reader.readAsArrayBuffer(file);
         }
@@ -194,13 +266,12 @@
                 e.preventDefault();
                 touchTimer = setTimeout(() => {
                     draggedElement = dot;
-                }, 500); // 0.5 seconds long press
+                }, 500);
             }, { passive: false });
 
             dot.addEventListener('touchend', (e) => {
                 clearTimeout(touchTimer);
                 touchTimer = null;
-                // The actual annotation update is handled by the container's touchend event
             });
 
             // Click to delete (only in set-point mode)
@@ -257,6 +328,48 @@
             annotations
                 .filter(ann => ann.key === key)
                 .forEach(ann => drawAnnotation(container, ann));
+        }
+
+        // Sidebar page list and navigation
+        function updatePdfPageList() {
+            const list = document.getElementById('pdfPageList');
+            list.innerHTML = '';
+            pdfFiles.forEach(file => {
+                for (let i = 1; i <= (file.numPages || 0); i++) {
+                    const li = document.createElement('li');
+                    li.textContent = `${file.name} - Page ${i}`;
+                    li.onclick = () => scrollToPage(`${file.name}-${i}`);
+                    list.appendChild(li);
+                }
+            });
+        }
+
+        function scrollToPage(key) {
+            const container = document.querySelector(`.page-container[data-key="${key}"]`);
+            if (container) container.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Page indicator
+        window.addEventListener('scroll', updatePageIndicator);
+
+        function updatePageIndicator() {
+            const containers = Array.from(document.querySelectorAll('.page-container'));
+            let current = null;
+            let minDiff = Infinity;
+            containers.forEach(container => {
+                const rect = container.getBoundingClientRect();
+                const diff = Math.abs(rect.top - 80);
+                if (diff < minDiff && rect.bottom > 0) {
+                    minDiff = diff;
+                    current = container;
+                }
+            });
+            if (current) {
+                const [fileName, pageNum] = current.dataset.key.split('-');
+                document.getElementById('pageIndicator').textContent = `Page ${pageNum}`;
+            } else {
+                document.getElementById('pageIndicator').textContent = 'Page -';
+            }
         }
     </script>
 </body>
