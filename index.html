@@ -46,11 +46,13 @@
         <input type="file" id="pdfInput" accept="application/pdf" multiple>
         <button id="addModeBtn" onclick="toggleAddMode()">Set Point</button>
         <button id="moveModeBtn" onclick="toggleMoveMode()">Move</button>
+        <!-- 新增：調整所有點大小的按鈕 -->
+        <button id="resizeBtn" onclick="resizeAllPoints()">Resize Points</button>
         <button id="exportPdfBtn" onclick="exportAnnotatedPDF()">Export PDF</button>
     </div>
     <div id="pdf-container"></div>
 
-    <!-- 依赖库 -->
+    <!-- 依賴庫 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -62,7 +64,8 @@
         let currentAnnotationId = 1;
         let currentMode = 'none'; // 'add' / 'move' / 'none'
         let draggedElement = null;
-        const DISPLAY_SCALE = 1.5; // 屏幕显示缩放比例，不影响导出尺寸
+        const DISPLAY_SCALE = 1.5; // 螢幕顯示縮放比例，不影響匯出尺寸
+        let currentDotSize = 24; // 預設標註點尺寸（像素）
         
         pdfjsLib.GlobalWorkerOptions.workerSrc = 
             'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.worker.min.js';
@@ -95,12 +98,12 @@
                 
                 for (let i = 1; i <= pdf.numPages; i++) {
                     const page = await pdf.getPage(i);
-                    // 获取原始PDF页面尺寸（单位：pt，PDF标准单位），scale=1时即为原生尺寸
+                    // 取得原始PDF頁面尺寸（單位：pt，PDF標準單位）
                     const originalViewport = page.getViewport({ scale: 1 });
                     const originalWidth = originalViewport.width;
                     const originalHeight = originalViewport.height;
                     
-                    // 显示用的缩放视口
+                    // 顯示用的縮放視口
                     const displayViewport = page.getViewport({ scale: DISPLAY_SCALE });
                     
                     const canvas = document.createElement('canvas');
@@ -111,7 +114,7 @@
                     const pageContainer = document.createElement('div');
                     pageContainer.className = 'page-container';
                     pageContainer.dataset.key = `${file.name}-${i}`;
-                    // 保存原始PDF页面尺寸（pt），导出时严格使用这个尺寸
+                    // 儲存原始PDF頁面尺寸（pt），匯出時嚴格使用這個尺寸
                     pageContainer.dataset.pdfWidth = originalWidth;
                     pageContainer.dataset.pdfHeight = originalHeight;
                     
@@ -128,7 +131,7 @@
         }
 
         function setupPageInteractions(container) {
-            // 双击添加标记
+            // 雙擊添加標記
             container.addEventListener('dblclick', function(e) {
                 if (currentMode !== 'add') return;
                 const rect = container.getBoundingClientRect();
@@ -136,42 +139,42 @@
                 const y = e.clientY - rect.top;
                 createAnnotation(container, x, y);
             });
-            // 鼠标拖拽移动
+            // 滑鼠拖曳移動
             container.addEventListener('mousemove', function(e) {
                 if (!draggedElement) return;
                 const rect = container.getBoundingClientRect();
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
-                draggedElement.style.left = `${x - 12}px`;
-                draggedElement.style.top = `${y - 12}px`;
+                draggedElement.style.left = `${x - currentDotSize / 2}px`;
+                draggedElement.style.top = `${y - currentDotSize / 2}px`;
             });
             container.addEventListener('mouseup', () => {
                 if (draggedElement) {
                     const annotation = annotations.find(
                         a => a.id === parseInt(draggedElement.dataset.id)
                     );
-                    annotation.x = parseFloat(draggedElement.style.left) + 12;
-                    annotation.y = parseFloat(draggedElement.style.top) + 12;
+                    annotation.x = parseFloat(draggedElement.style.left) + currentDotSize / 2;
+                    annotation.y = parseFloat(draggedElement.style.top) + currentDotSize / 2;
                     draggedElement = null;
                 }
             });
-            // 触屏拖拽支持
+            // 觸控拖曳支援
             container.addEventListener('touchmove', function(e) {
                 if (!draggedElement) return;
                 e.preventDefault();
                 const rect = container.getBoundingClientRect();
                 const x = e.touches[0].clientX - rect.left;
                 const y = e.touches[0].clientY - rect.top;
-                draggedElement.style.left = `${x - 12}px`;
-                draggedElement.style.top = `${y - 12}px`;
+                draggedElement.style.left = `${x - currentDotSize / 2}px`;
+                draggedElement.style.top = `${y - currentDotSize / 2}px`;
             }, { passive: false });
             container.addEventListener('touchend', function(e) {
                 if (draggedElement) {
                     const annotation = annotations.find(
                         a => a.id === parseInt(draggedElement.dataset.id)
                     );
-                    annotation.x = parseFloat(draggedElement.style.left) + 12;
-                    annotation.y = parseFloat(draggedElement.style.top) + 12;
+                    annotation.x = parseFloat(draggedElement.style.left) + currentDotSize / 2;
+                    annotation.y = parseFloat(draggedElement.style.top) + currentDotSize / 2;
                     draggedElement = null;
                 }
             });
@@ -193,17 +196,21 @@
         function drawAnnotation(container, annotation) {
             const dot = document.createElement('div');
             dot.className = 'annotation-dot';
-            dot.style.left = `${annotation.x - 12}px`;
-            dot.style.top = `${annotation.y - 12}px`;
+            // 動態設定點的尺寸與位置（以中心點為基準）
+            dot.style.width = `${currentDotSize}px`;
+            dot.style.height = `${currentDotSize}px`;
+            dot.style.left = `${annotation.x - currentDotSize / 2}px`;
+            dot.style.top = `${annotation.y - currentDotSize / 2}px`;
+            dot.style.fontSize = `${currentDotSize / 2}px`; // 文字隨點大小等比例縮放
             dot.textContent = annotation.number;
             dot.dataset.id = annotation.id;
-            // 鼠标拖拽触发
+            // 滑鼠拖曳觸發
             dot.addEventListener('mousedown', (e) => {
                 if (currentMode === 'move') {
                     draggedElement = dot;
                 }
             });
-            // 长按触屏拖拽
+            // 長按觸控拖曳
             let touchTimer = null;
             dot.addEventListener('touchstart', (e) => {
                 if (currentMode !== 'move') return;
@@ -216,7 +223,7 @@
                 clearTimeout(touchTimer);
                 touchTimer = null;
             });
-            // 点击删除
+            // 點擊刪除
             dot.addEventListener('click', function(e) {
                 if (currentMode === 'move') return;
                 e.stopPropagation();
@@ -271,7 +278,20 @@
                 .forEach(ann => drawAnnotation(container, ann));
         }
 
-        // ========== 导出带标记的PDF（修复页面尺寸/方向） ==========
+        // ========== 新增：批量調整所有點的大小 ==========
+        function resizeAllPoints() {
+            const input = prompt("請輸入標註點的尺寸（像素，預設24）：", currentDotSize);
+            if (input === null) return; // 使用者點擊取消則不變更
+            const newSize = parseInt(input);
+            if (isNaN(newSize) || newSize <= 0) {
+                alert("請輸入有效的正整數像素值");
+                return;
+            }
+            currentDotSize = newSize;
+            redrawAllAnnotations(); // 重繪所有點，中心位置不變，僅改變尺寸
+        }
+
+        // ========== 匯出帶標記的PDF（修復頁面尺寸/方向） ==========
         async function exportAnnotatedPDF() {
             const pageContainers = document.querySelectorAll('.page-container');
             if(pageContainers.length === 0){
@@ -279,7 +299,7 @@
                 return;
             }
 
-            // 取第一页的原始尺寸初始化PDF
+            // 取第一頁的原始尺寸初始化PDF
             const firstPage = pageContainers[0];
             const firstW = parseFloat(firstPage.dataset.pdfWidth);
             const firstH = parseFloat(firstPage.dataset.pdfHeight);
@@ -294,7 +314,7 @@
                 const pdfWidth = parseFloat(pageDom.dataset.pdfWidth);
                 const pdfHeight = parseFloat(pageDom.dataset.pdfHeight);
 
-                // 渲染当前页面（包含红色标记点），高清晰度输出
+                // 渲染當前頁面（包含紅色標記點），高畫質輸出
                 const canvas = await html2canvas(pageDom, {
                     useCORS: true,
                     scale: 2,
@@ -304,15 +324,15 @@
                 const imgData = canvas.toDataURL('image/jpeg', 0.95);
 
                 if(idx > 0){
-                    // 每页都使用自己的原始尺寸添加新页面，自动适配横竖
+                    // 每頁都使用自己的原始尺寸添加新頁面，自動適配橫豎
                     doc.addPage([pdfWidth, pdfHeight]);
                 }
                 
-                // 将图片按原始PDF尺寸完整铺满，无拉伸、不变形
+                // 將圖片按原始PDF尺寸完整鋪滿，無拉伸、不變形
                 doc.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
             }
 
-            // 自动命名：日-月-年-layout record.pdf
+            // 自動命名：日-月-年-layout record.pdf
             const fileName = `${getFormattedDate()}-layout record.pdf`;
             doc.save(fileName);
         }
