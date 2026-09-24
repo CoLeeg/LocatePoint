@@ -8,6 +8,7 @@
             position: relative; 
             margin: 10px 0; 
             border: 1px solid #ccc;
+            display: inline-block;
         }
         .annotation-dot {
             position: absolute;
@@ -45,22 +46,37 @@
         <input type="file" id="pdfInput" accept="application/pdf" multiple>
         <button id="addModeBtn" onclick="toggleAddMode()">Set Point</button>
         <button id="moveModeBtn" onclick="toggleMoveMode()">Move</button>
+        <button id="exportPdfBtn" onclick="exportAnnotatedPDF()">Export PDF</button>
     </div>
     <div id="pdf-container"></div>
 
+    <!-- 依赖库 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
     <script>
+        const { jsPDF } = window.jspdf;
         let pdfFiles = [];
         let annotations = [];
         let currentAnnotationId = 1;
         let currentMode = 'none'; // 'add' / 'move' / 'none'
         let draggedElement = null;
-
+        const DISPLAY_SCALE = 1.5; // 屏幕显示缩放比例，不影响导出尺寸
+        
         pdfjsLib.GlobalWorkerOptions.workerSrc = 
             'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.worker.min.js';
-
         document.getElementById('pdfInput').addEventListener('change', handleFileUpload);
         
+        // 日期格式化：日-月-年
+        function getFormattedDate() {
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            return `${day}-${month}-${year}`;
+        }
+
         function handleFileUpload(e) {
             const files = Array.from(e.target.files);
             files.forEach(file => {
@@ -79,19 +95,27 @@
                 
                 for (let i = 1; i <= pdf.numPages; i++) {
                     const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({ scale: 1.5 });
+                    // 获取原始PDF页面尺寸（单位：pt，PDF标准单位），scale=1时即为原生尺寸
+                    const originalViewport = page.getViewport({ scale: 1 });
+                    const originalWidth = originalViewport.width;
+                    const originalHeight = originalViewport.height;
+                    
+                    // 显示用的缩放视口
+                    const displayViewport = page.getViewport({ scale: DISPLAY_SCALE });
                     
                     const canvas = document.createElement('canvas');
                     const context = canvas.getContext('2d');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
+                    canvas.height = displayViewport.height;
+                    canvas.width = displayViewport.width;
                     
                     const pageContainer = document.createElement('div');
                     pageContainer.className = 'page-container';
-                    pageContainer.style.width = `${viewport.width}px`;
                     pageContainer.dataset.key = `${file.name}-${i}`;
+                    // 保存原始PDF页面尺寸（pt），导出时严格使用这个尺寸
+                    pageContainer.dataset.pdfWidth = originalWidth;
+                    pageContainer.dataset.pdfHeight = originalHeight;
                     
-                    await page.render({ canvasContext: context, viewport }).promise;
+                    await page.render({ canvasContext: context, viewport: displayViewport }).promise;
                     
                     pageContainer.appendChild(canvas);
                     container.appendChild(pageContainer);
@@ -104,7 +128,7 @@
         }
 
         function setupPageInteractions(container) {
-            // Double-click to add annotation (desktop only)
+            // 双击添加标记
             container.addEventListener('dblclick', function(e) {
                 if (currentMode !== 'add') return;
                 const rect = container.getBoundingClientRect();
@@ -112,8 +136,7 @@
                 const y = e.clientY - rect.top;
                 createAnnotation(container, x, y);
             });
-
-            // Mouse move for drag
+            // 鼠标拖拽移动
             container.addEventListener('mousemove', function(e) {
                 if (!draggedElement) return;
                 const rect = container.getBoundingClientRect();
@@ -122,8 +145,6 @@
                 draggedElement.style.left = `${x - 12}px`;
                 draggedElement.style.top = `${y - 12}px`;
             });
-
-            // Mouse up to end drag
             container.addEventListener('mouseup', () => {
                 if (draggedElement) {
                     const annotation = annotations.find(
@@ -134,8 +155,7 @@
                     draggedElement = null;
                 }
             });
-
-            // Touch move for drag
+            // 触屏拖拽支持
             container.addEventListener('touchmove', function(e) {
                 if (!draggedElement) return;
                 e.preventDefault();
@@ -145,8 +165,6 @@
                 draggedElement.style.left = `${x - 12}px`;
                 draggedElement.style.top = `${y - 12}px`;
             }, { passive: false });
-
-            // Touch end to end drag
             container.addEventListener('touchend', function(e) {
                 if (draggedElement) {
                     const annotation = annotations.find(
@@ -179,37 +197,31 @@
             dot.style.top = `${annotation.y - 12}px`;
             dot.textContent = annotation.number;
             dot.dataset.id = annotation.id;
-
-            // Mouse drag
+            // 鼠标拖拽触发
             dot.addEventListener('mousedown', (e) => {
                 if (currentMode === 'move') {
                     draggedElement = dot;
                 }
             });
-
-            // Touch drag (long press to start)
+            // 长按触屏拖拽
             let touchTimer = null;
             dot.addEventListener('touchstart', (e) => {
                 if (currentMode !== 'move') return;
                 e.preventDefault();
                 touchTimer = setTimeout(() => {
                     draggedElement = dot;
-                }, 500); // 0.5 seconds long press
+                }, 500);
             }, { passive: false });
-
             dot.addEventListener('touchend', (e) => {
                 clearTimeout(touchTimer);
                 touchTimer = null;
-                // The actual annotation update is handled by the container's touchend event
             });
-
-            // Click to delete (only in set-point mode)
+            // 点击删除
             dot.addEventListener('click', function(e) {
                 if (currentMode === 'move') return;
                 e.stopPropagation();
                 handleAnnotationClick(this);
             });
-
             container.appendChild(dot);
         }
 
@@ -257,6 +269,52 @@
             annotations
                 .filter(ann => ann.key === key)
                 .forEach(ann => drawAnnotation(container, ann));
+        }
+
+        // ========== 导出带标记的PDF（修复页面尺寸/方向） ==========
+        async function exportAnnotatedPDF() {
+            const pageContainers = document.querySelectorAll('.page-container');
+            if(pageContainers.length === 0){
+                alert("Please upload PDF first!");
+                return;
+            }
+
+            // 取第一页的原始尺寸初始化PDF
+            const firstPage = pageContainers[0];
+            const firstW = parseFloat(firstPage.dataset.pdfWidth);
+            const firstH = parseFloat(firstPage.dataset.pdfHeight);
+            const doc = new jsPDF({
+                unit: 'pt',
+                format: [firstW, firstH],
+                orientation: firstW > firstH ? 'landscape' : 'portrait'
+            });
+
+            for(let idx = 0; idx < pageContainers.length; idx++){
+                const pageDom = pageContainers[idx];
+                const pdfWidth = parseFloat(pageDom.dataset.pdfWidth);
+                const pdfHeight = parseFloat(pageDom.dataset.pdfHeight);
+
+                // 渲染当前页面（包含红色标记点），高清晰度输出
+                const canvas = await html2canvas(pageDom, {
+                    useCORS: true,
+                    scale: 2,
+                    backgroundColor: '#ffffff',
+                    logging: false
+                });
+                const imgData = canvas.toDataURL('image/jpeg', 0.95);
+
+                if(idx > 0){
+                    // 每页都使用自己的原始尺寸添加新页面，自动适配横竖
+                    doc.addPage([pdfWidth, pdfHeight]);
+                }
+                
+                // 将图片按原始PDF尺寸完整铺满，无拉伸、不变形
+                doc.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+            }
+
+            // 自动命名：日-月-年-layout record.pdf
+            const fileName = `${getFormattedDate()}-layout record.pdf`;
+            doc.save(fileName);
         }
     </script>
 </body>
